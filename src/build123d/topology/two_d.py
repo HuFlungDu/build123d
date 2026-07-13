@@ -2213,6 +2213,23 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         # Need to keep track of the separation between adjacent edges
         first_start_point = None
 
+        # If the first two edges are at an angle close to 180, edge extension can fail to cause an intersection at a good point
+        # For a closed wire, try to get the smallest angle for first and last edges to maximise the probablility of a good intersect post wrap
+        if planar_wire.is_closed:
+            starting_edge = 0
+            lowest_angle = 180
+            for i, (edge1, edge2) in enumerate(zip(planar_edges, planar_edges[1:]+[planar_edges[0]])):
+                try:
+                    angle = (-(edge1%1)).get_angle(edge2%0)
+                    if angle < lowest_angle:
+                        lowest_angle = angle
+                        starting_edge = i+1
+                except:
+                    # tangent can fail silently and return a 0 vector, so we will just ignore those values and assume they ore wrong anyway
+                    pass
+            starting_edge = starting_edge%len(planar_edges)
+            planar_edges = ShapeList(planar_edges[starting_edge:] + planar_edges[:starting_edge])
+
         #
         # Part 2: Wrap the planar wires on the surface by creating a spline
         #         through points cast from the planar onto the surface.
