@@ -2286,10 +2286,10 @@ class Face(Mixin2D, Shape[TopoDS_Face]):
         #
 
         # Extend the first and last edge so that they cross
-        first_edge, first_curve = wrapped_edges[0]._extend_spline(
+        first_edge, first_curve = tmp_first_edge, tmp_first_curve = wrapped_edges[0]._extend_spline(
             True, surface_geometry, extension_factor
         )
-        last_edge, last_curve = wrapped_edges[-1]._extend_spline(
+        last_edge, last_curve = tmp_last_edge, tmp_last_curve = wrapped_edges[-1]._extend_spline(
             False, surface_geometry, extension_factor
         )
 
