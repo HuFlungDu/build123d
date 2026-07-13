@@ -2754,6 +2754,23 @@ class Face(Mixin2D[TopoDS_Face]):
         # Need to keep track of the separation between adjacent edges
         first_start_point = None
 
+        # If the first two edges are at an angle close to 180, edge extension can fail to cause an intersection at a good point
+        # For a closed wire, try to get the smallest angle for first and last edges to maximise the probablility of a good intersect post wrap
+        if planar_wire.is_closed:
+            starting_edge = 0
+            lowest_angle = 180
+            for i, (edge1, edge2) in enumerate(zip(planar_edges, planar_edges[1:]+[planar_edges[0]])):
+                try:
+                    angle = (-(edge1%1)).get_angle(edge2%0)
+                    if angle < lowest_angle:
+                        lowest_angle = angle
+                        starting_edge = i+1
+                except:
+                    # tangent can fail silently and return a 0 vector, so we will just ignore those values and assume they ore wrong anyway
+                    pass
+            starting_edge = starting_edge%len(planar_edges)
+            planar_edges = ShapeList(planar_edges[starting_edge:] + planar_edges[:starting_edge])
+
         #
         # Part 2: Wrap the planar wires on the surface by creating a spline
         #         through points cast from the planar onto the surface.
@@ -2817,23 +2834,47 @@ class Face(Mixin2D[TopoDS_Face]):
             False, surface_geometry, extension_factor
         )
 
-        # Trim the extended edges at their intersection point
-        extrema = GeomAPI_ExtremaCurveCurve(first_curve, last_curve)
-        if extrema.NbExtrema() < 1:
-            raise RuntimeError(
-                "Extended first/last edges do not intersect; increase extension."
-            )
-        param_first, param_last = extrema.Parameters(1)
+        for i in range(10):
+            # Trim the extended edges at their intersection point
+            extrema = GeomAPI_ExtremaCurveCurve(tmp_first_curve, tmp_last_curve)
+            if extrema.NbExtrema() < 1:
+                raise RuntimeError(
+                    "Extended first/last edges do not intersect; increase extension."
+                )
+            try:
+                param_first, param_last = extrema.Parameters(1)
+            except:
+                trimmed_first, trimmed_last = first_edge, last_edge
+                break
+            else:
+                u_start_first: float = tmp_first_edge.param_at(0)
+                u_end_first: float = tmp_first_edge.param_at(1)
+                new_start = (param_first - u_start_first) / (u_end_first - u_start_first)
+                try:
+                    trimmed_first = tmp_first_edge.trim(new_start, 1.0)
+                except:
+                    trimmed_first = copy.copy(tmp_first_edge)
 
-        u_start_first: float = first_edge.param_at(0)
-        u_end_first: float = first_edge.param_at(1)
-        new_start = (param_first - u_start_first) / (u_end_first - u_start_first)
-        trimmed_first = first_edge.trim(new_start, 1.0)
+                u_start_last: float = tmp_last_edge.param_at(0)
+                u_end_last: float = tmp_last_edge.param_at(1)
+                new_end = (param_last - u_start_last) / (u_end_last - u_start_last)
+                try:
+                    trimmed_last = tmp_last_edge.trim(0.0, new_end)
+                except:
+                    trimmed_last = copy.copy(tmp_last_edge)
+                closing_error = (
+                    trimmed_first.position_at(0) - trimmed_last.position_at(1)
+                ).length
+                if closing_error < .001:
+                    break
+                # Sometimes there is weird crossover left here, so just try again.
+                tmp_first_edge, tmp_last_edge = trimmed_first, trimmed_last
+                tmp_first_curve, tmp_last_curve = (BRep_Tool.Curve_s(tmp_first_edge.wrapped, tmp_first_edge.param_at(0), tmp_first_edge.param_at(1)),
+                                                BRep_Tool.Curve_s(tmp_last_edge.wrapped, tmp_last_edge.param_at(0), tmp_last_edge.param_at(1)))
+        else:
+            pass
+            # raise RuntimeError("Failed to close curves")
 
-        u_start_last: float = last_edge.param_at(0)
-        u_end_last: float = last_edge.param_at(1)
-        new_end = (param_last - u_start_last) / (u_end_last - u_start_last)
-        trimmed_last = last_edge.trim(0.0, new_end)
 
         # Replace the first and last edges with their modified versions
         wrapped_edges[0] = trimmed_first
