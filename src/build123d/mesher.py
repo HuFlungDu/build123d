@@ -374,6 +374,7 @@ class Mesher:
         mesh_type: MeshType = MeshType.MODEL,
         part_number: str | None = None,
         uuid_value: UUID | None = None,
+        allow_invalid: bool = False
     ):
         """add_shape
 
@@ -387,6 +388,7 @@ class Mesher:
             mesh_type (MeshType, optional): 3D printing use of mesh. Defaults to MeshType.MODEL.
             part_number (str, optional): part #. Defaults to None.
             uuid_value (uuid, optional): value from uuid package. Defaults to None.
+            allow_inlvalid (bool): Do not raise an exception on an invalid mesh
 
         Raises:
             RuntimeError: 3mf mesh is invalid
@@ -442,8 +444,9 @@ class Mesher:
             self._add_color(b3d_shape, mesh_3mf)
 
             # Check mesh
-            if not mesh_3mf.IsValid():
-                raise RuntimeError("3mf mesh is invalid")
+            if not allow_invalid:
+                if not mesh_3mf.IsValid():
+                    raise RuntimeError("3mf mesh is invalid")
             if not mesh_3mf.IsManifoldAndOriented():
                 warnings.warn("3mf mesh is not manifold", stacklevel=2)
 
