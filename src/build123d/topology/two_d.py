@@ -685,6 +685,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
         surface_loc: Location,
         snap_to_face: bool = True,
         tolerance: float = 0.001,
+        max_tolerance: float = 0.001
     ) -> Edge:
         """_wrap_edge
 
@@ -756,7 +757,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
             # The start point isn't at the surface_loc so wrap a line to find it
             to_start_edge = Edge.make_line((0, 0), planar_edge @ 0)
             wrapped_to_start_edge = self._wrap_edge(
-                to_start_edge, surface_loc, snap_to_face=True, tolerance=tolerance
+                to_start_edge, surface_loc, snap_to_face=True, tolerance=tolerance, max_tolerance=max_tolerance
             )
             start_pnt = wrapped_to_start_edge @ 1
             _, start_normal = _intersect_surface_normal(
@@ -792,9 +793,9 @@ class Mixin2D(ABC, Shape[TOPODS]):
             subdivisions *= 2
             loop_count += 1
 
-        if length_error > tolerance:
+        if length_error > max(tolerance, max_tolerance):
             raise RuntimeError(
-                f"Length error of {length_error:.6f} exceeds tolerance {tolerance}"
+                f"Length error of {length_error:.6f} exceeds tolerance {max(tolerance, max_tolerance)}"
             )
         if not wrapped_edge or not wrapped_edge.is_valid:
             raise RuntimeError("Wrapped edge is invalid")
@@ -2514,6 +2515,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> Edge: ...
     @overload
     def wrap(
@@ -2522,6 +2524,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> Wire: ...
     @overload
     def wrap(
@@ -2530,6 +2533,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> Face: ...
 
     def wrap(
@@ -2538,6 +2542,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> T:
         """wrap
 
@@ -2577,14 +2582,14 @@ class Face(Mixin2D[TopoDS_Face]):
         """
 
         if isinstance(planar_shape, Edge):
-            return self._wrap_edge(planar_shape, surface_loc, True, tolerance)
+            return self._wrap_edge(planar_shape, surface_loc, True, tolerance, max_tolerance=max_tolerance)
         if isinstance(planar_shape, Wire):
             return self._wrap_wire(
-                planar_shape, surface_loc, tolerance, extension_factor
+                planar_shape, surface_loc, tolerance, extension_factor, max_tolerance=max_tolerance
             )
         if isinstance(planar_shape, Face):
             return self._wrap_face(
-                planar_shape, surface_loc, tolerance, extension_factor
+                planar_shape, surface_loc, tolerance, extension_factor, max_tolerance=max_tolerance
             )
         raise TypeError(
             f"planar_shape must be of type Edge, Wire, Face not "
@@ -2666,6 +2671,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> Face:
         """_wrap_face
 
@@ -2682,10 +2688,10 @@ class Face(Mixin2D[TopoDS_Face]):
             Face: wrapped face
         """
         wrapped_perimeter = self._wrap_wire(
-            planar_face.outer_wire(), surface_loc, tolerance, extension_factor
+            planar_face.outer_wire(), surface_loc, tolerance, extension_factor, max_tolerance=max_tolerance
         )
         wrapped_holes = [
-            self._wrap_wire(w, surface_loc, tolerance, extension_factor)
+            self._wrap_wire(w, surface_loc, tolerance, extension_factor, max_tolerance=max_tolerance)
             for w in planar_face.inner_wires()
         ]
         wrapped_face = Face.make_surface(
@@ -2707,6 +2713,7 @@ class Face(Mixin2D[TopoDS_Face]):
         surface_loc: Location,
         tolerance: float = 0.001,
         extension_factor: float = 0.1,
+        max_tolerance: float = 0.001
     ) -> Wire:
         """_wrap_wire
 
@@ -2735,7 +2742,7 @@ class Face(Mixin2D[TopoDS_Face]):
         if len(planar_wire.edges()) == 1:
             planar_edge = planar_wire.edge()
             assert planar_edge is not None
-            return Wire([self._wrap_edge(planar_edge, surface_loc, True, tolerance)])
+            return Wire([self._wrap_edge(planar_edge, surface_loc, True, tolerance, max_tolerance=max_tolerance)])
 
         planar_edges = planar_wire.order_edges()
         wrapped_edges: list[Edge] = []
@@ -2774,7 +2781,7 @@ class Face(Mixin2D[TopoDS_Face]):
                 Vector(0, 0, 0), planar_edges[0].position_at(0)
             )
             wrapped_construction_line: Edge = self._wrap_edge(
-                construction_line, surface_loc, True, tolerance
+                construction_line, surface_loc, True, tolerance, max_tolerance=max_tolerance
             )
             edge_surface_point = wrapped_construction_line.position_at(1)
             planar_edge_end_point = planar_edges[0].position_at(0)
@@ -2790,7 +2797,7 @@ class Face(Mixin2D[TopoDS_Face]):
         for planar_edge in planar_edges:
             local_planar_edge = planar_edge.translate(-planar_edge_end_point)
             wrapped_edge: Edge = self._wrap_edge(
-                local_planar_edge, edge_surface_location, True, tolerance
+                local_planar_edge, edge_surface_location, True, tolerance, max_tolerance=max_tolerance
             )
             edge_surface_point = wrapped_edge.position_at(1)
             edge_surface_location = Location(
