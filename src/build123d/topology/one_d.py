@@ -2552,22 +2552,47 @@ class Edge(Mixin1D, Shape[TopoDS_Edge]):
         n_poles = curve_original.NbPoles()
         poles = [curve_original.Pole(i + 1) for i in range(n_poles)]
         # Find position and tangent past end of spline to extend it
-        ends = (-extension_factor, 1) if at_start else (0, 1 + extension_factor)
+        # ends = (-extension_factor, 1) if at_start else (0, 1 + extension_factor)
         if at_start:
-            new_pole = self.position_at(-extension_factor).to_pnt()
+            while extension_factor > 0:
+                try:
+                    new_pole = self.position_at(-extension_factor).to_pnt()
+                    break
+                except:
+                    extension_factor -= .01
+            else:
+                raise ValueError("Failed to extend spline")
+            ends = (-extension_factor, 1)
             poles = [new_pole] + poles
         else:
-            new_pole = self.position_at(1 + extension_factor).to_pnt()
+            while extension_factor > 0:
+                try:
+                    new_pole = self.position_at(1 + extension_factor).to_pnt()
+                    break
+                except:
+                    extension_factor -= .01
+            else:
+                raise ValueError("Failed to extend spline")
             poles = poles + [new_pole]
+            ends = (0, 1 + extension_factor)
         tangents: list[VectorLike] = [self.tangent_at(p) for p in ends]
 
-        pnts: list[VectorLike] = [Vector(p) for p in poles]
-        extended_edge = Edge.make_spline(pnts, tangents=tangents)
+        # pnts: list[VectorLike] = [Vector(p) for p in poles]
+        pnts2 = [self.position_at(ends[0])]
+        if (at_start):
+            pnts2.append(self.position_at(0))
+        subdivisions = len(poles)*2
+        for i in range(1, subdivisions):
+            pnts2.append(self.position_at(i/subdivisions))
+        if (not at_start):
+            pnts2.append(self.position_at(1))
+        pnts2.append(self.position_at(ends[1]))
+        # pnts: list[VectorLike] = [self.position_at(p) for p in range(ends[0], ends[1], (ends[1]-ends[0])/())]
+        # Ignore tangents I guess?
+        extended_edge = Edge.make_spline(pnts2)
         assert extended_edge.wrapped is not None
 
-        geom_curve = BRep_Tool.Curve_s(
-            extended_edge.wrapped, extended_edge.param_at(0), extended_edge.param_at(1)
-        )
+        geom_curve = BRep_Tool.Curve_s(extended_edge.wrapped, extended_edge.param_at(0), extended_edge.param_at(1))
         snapped_geom_curve = GeomProjLib.Project_s(geom_curve, geom_surface)
         if snapped_geom_curve is None:
             raise RuntimeError("Failed to snap extended edge to surface")
