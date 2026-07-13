@@ -492,6 +492,32 @@ class Mesher:
             shape_obj = Solid(solid_builder.Solid())
 
         return shape_obj
+    
+    def load(self, file_name: PathLike | str | bytes):
+        """load
+
+        Args:
+            file_name Union[PathLike, str, bytes]: file path
+
+        Raises:
+            ValueError: Unknown file format - must be 3mf or stl
+
+        Returns:
+            None
+        """
+        file_name = fsdecode(file_name)
+        _, input_file_extension = os.path.splitext(file_name)
+        if input_file_extension not in [".3mf", ".stl"]:
+            raise ValueError(f"Unknown file format {input_file_extension}")
+        reader = self.model.QueryReader(input_file_extension[1:])
+        reader.ReadFromFile(file_name)
+        self.unit = Mesher._map_3mf_to_b3d_unit[self.model.GetUnit()]
+
+        # Extract 3MF meshes and translate to OCP meshes
+        mesh_iterator: Lib3MF.MeshObjectIterator = self.model.GetMeshObjects()
+        for _i in range(mesh_iterator.Count()):
+            mesh_iterator.MoveNext()
+            self.meshes.append(mesh_iterator.GetCurrentMeshObject())
 
     def read(self, file_name: PathLike | str | bytes) -> list[Shape]:
         """read
